@@ -48,8 +48,8 @@ class self_attend(nn.Module):
                     output = F.scaled_dot_product_attention(q, k, v, attn_mask=None, is_causal=True)
 
             else:
-                output = F.scaled_dot_product_attention(q, k, v,attn_mask = None, is_causal=False)
-
+                with torch.backends.cuda.sdp_kernel(enable_math=False):
+                    output = F.scaled_dot_product_attention(q, k, v,attn_mask = None, is_causal=False)
         else:
             
             scaler = (1.0 / math.sqrt(k.shape[-1]))
