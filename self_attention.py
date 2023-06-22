@@ -44,7 +44,7 @@ class self_attend(nn.Module):
 
             if self.configs['is_causal']:
 
-                with torch.backends.cuda.sdp_kernel(enable_math=False): # use the most efficient implementation fused kernel
+                with torch.backends.cuda.sdp_kernel(enable_math=False): # using the most efficient implementation fused kernel
                     output = F.scaled_dot_product_attention(q, k, v, attn_mask=None, is_causal=True)
 
             else:
