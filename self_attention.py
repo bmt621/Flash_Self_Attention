@@ -66,7 +66,6 @@ class SelfAttend(nn.Module):
 
                 output = norm_weights @ v
             else:
-
                 if padding_mask:
                     attn_weight.masked_fill(padding_mask == 0, float('-inf'))
 
