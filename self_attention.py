@@ -23,8 +23,8 @@ class SelfAttend(nn.Module):
         self.key = nn.Linear(self.configs.hidden_dim,self.configs.hidden_dim)
         self.value  = nn.Linear(self.configs.hidden_dim,self.configs.hidden_dim)
 
-        self.c_proj = nn.Linear(self.configs.hidden_dim, self.configs.hidden_dim,bias=self.configs.bias)
-        self.resid_dropout = nn.Dropout(self.configs.dropout)
+        self.proj = nn.Linear(self.configs.hidden_dim, self.configs.hidden_dim,bias=self.configs.bias)
+        self.proj_dropout = nn.Dropout(self.configs.dropout)
         self.attn_dropout = nn.Dropout(0.1)
         
         if configs.is_causal and not self.configs.use_flash:
@@ -43,12 +43,15 @@ class SelfAttend(nn.Module):
 
             if self.configs.is_causal:
 
-                with torch.backends.cuda.sdp_kernel(enable_math=False): # use the most efficient implementation fused kernel
+                with torch.backends.cuda.sdp_kernel(enable_math=False): # use the most efficient implementation of fused kernel
                     output = F.scaled_dot_product_attention(q, k, v, attn_mask=None, is_causal=True)
+                output = self.proj_dropout(self.proj(output))
 
             else:
                 with torch.backends.cuda.sdp_kernel(enable_math=False):
                     output = F.scaled_dot_product_attention(q, k, v,attn_mask = None, is_causal=False)
+                output = output.permute(0, 2, 1, 3).flatten(start_dim=2)
+                output = self.proj_dropout(self.proj(output))
 
         else:
             
@@ -65,13 +68,19 @@ class SelfAttend(nn.Module):
                 norm_weights = self.attn_dropout(norm_weights)
 
                 output = norm_weights @ v
+                output = output.permute(0, 2, 1, 3).flatten(start_dim=2)
+                output = self.proj_dropout(self.proj(output))
+
             else:
                 if padding_mask:
                     attn_weight.masked_fill(padding_mask == 0, float('-inf'))
 
                 norm_weights = F.softmax(attn_weight,dim=-1)
+                norm_weights = self.attn_dropout(norm_weights)
 
                 output = norm_weights @ v
-                
+                output = output.permute(0, 2, 1, 3).flatten(start_dim=2)
+                output = self.proj_dropout(self.proj(output))
+
 
         return output
