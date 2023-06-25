@@ -136,7 +136,6 @@ class EncoderBlock(nn.Module):
 
         return x
     
-
 class DecoderBlock(nn.Module):
 
     def __init__(self,config):
@@ -147,6 +146,8 @@ class DecoderBlock(nn.Module):
 
         self.ln_2 = LayerNorm(config.hidden_dim, bias=config.bias)
         self.mlp = MLP(config)
+
+        
 
     def forward(self, x, mem, tgt_padding_mask = None):
         x = self.ln_1(x)
