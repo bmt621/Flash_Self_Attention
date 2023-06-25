@@ -2,15 +2,7 @@ import torch
 import torch.nn.functional as F
 import math
 import torch.nn as nn
-
-class self_attend_configs():
-    max_blocksize: int = 512
-    hidden_dim: int = 768
-    nhead: int  = 8
-    use_flash_attn: True
-    dropout: float = 0.1
-    bias : bool = True
-
+import logging
 
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
@@ -45,9 +37,10 @@ class MLP(nn.Module):
 class SelfAttend(nn.Module):
     def __init__(self,configs):
         super(SelfAttend,self).__init__()
-        self.configs = configs
 
-        #assert (configs['hidden_dim'] % configs['nhead']), 'token hidden dimension and number of heads must be devisible'
+        self.configs = configs
+        logging.basicConfig(level=logging.INFO)  
+        self.logger = logging.getLogger(__name__)  # Create a logger instance
 
         self.query = nn.Linear(self.configs.hidden_dim,self.configs.hidden_dim)
         self.key = nn.Linear(self.configs.hidden_dim,self.configs.hidden_dim)
@@ -57,41 +50,47 @@ class SelfAttend(nn.Module):
         self.proj_dropout = nn.Dropout(self.configs.dropout)
         self.attn_dropout = nn.Dropout(0.1)
         
-        if configs.is_causal and not self.configs.use_flash:
-            self.register_buffer('attn_mask',torch.tril(torch.ones(1, 1, self.configs.max_blocksize,self.configs.max_blocksize,dtype=bool)))
 
         self.use_flash_attn = configs.use_flash_attn
 
     def get_qkv(self,xq,xk,xv):
-        assert xq.shape == xk.shape == xv.shape, 'shape of query, key and value must be thesame'
-        B, T, hd = xq.shape
+        assert xq.shape[-1] == xk.shape[-1] == xv.shape[-1], self.logger.info('shape of query, key and value embedding dimension must be thesame')
 
-        q = self.query(xq).view(B, T, self.configs.nhead, -1).permute(0, 2, 1, 3)
-        k = self.key(xk).view(B, T, self.configs.nhead, -1).permute(0, 2, 1, 3)
-        v = self.value(xv).view(B, T, self.configs.nhead, -1).permute(0, 2, 1, 3)
+        B, qT, hd = xq.shape
+        _, kT, _ = xk.shape
+        _, vT, _ = xv.shape
+
+        assert kT == vT, self.logger.info('query length and values length should be the same')
+        
+        q = self.query(xq).view(B, qT, self.configs.nhead, -1).permute(0, 2, 1, 3)
+        k = self.key(xk).view(B, kT, self.configs.nhead, -1).permute(0, 2, 1, 3)
+        v = self.value(xv).view(B, vT, self.configs.nhead, -1).permute(0, 2, 1, 3)
 
         return q, k, v
     
 
     def forward(self,q, k, v,padding_mask = None, is_causal = False):
         
+        if is_causal and not self.configs.use_flash_attn:
+            self.register_buffer('attn_mask',torch.tril(torch.ones(1, 1, self.configs.max_blocksize,self.configs.max_blocksize,dtype=bool)))
 
         if self.configs.use_flash_attn:
-
+            self.logger.info("This implementation of flash attention does not support src_key_padding_mask or tgt_key_padding_mask")
+            
             if is_causal:
                 with torch.backends.cuda.sdp_kernel(enable_math=False): # use the most efficient implementation fused kernel
                     output = F.scaled_dot_product_attention(q, k, v, attn_mask=None, is_causal=True)
-
             else:
                 with torch.backends.cuda.sdp_kernel(enable_math=False):
                     output = F.scaled_dot_product_attention(q, k, v,attn_mask = None, is_causal=False)
 
         else:
+            
             scaler = (1.0 / math.sqrt(k.shape[-1]))
             attn_weight = (q @ k.transpose(2,3)) * scaler
 
             if is_causal:
-                masked_weights = attn_weight.masked_fill(self.attn_mask[:,:,:T,:T]==0, float('-inf'))
+                masked_weights = attn_weight.masked_fill(self.attn_mask[:,:,:q.shape[2],:q.shape[2]]==0, float('-inf'))
 
                 if padding_mask:
                     masked_weights.masked_fill(padding_mask == 0, float('-inf'))
@@ -115,7 +114,6 @@ class SelfAttend(nn.Module):
         output = self.proj_dropout(self.proj(output))
 
         return output
-    
 
 class EncoderBlock(nn.Module):
 
