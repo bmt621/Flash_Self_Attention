@@ -111,8 +111,8 @@ class SelfAttend(nn.Module):
             if is_causal:
                 masked_weights = attn_weight.masked_fill(self.attn_mask[:,:,:q.shape[2],:q.shape[2]]==0, float('-inf'))
 
-                if padding_mask:
-                    masked_weights.masked_fill(padding_mask == 0, float('-inf'))
+                if padding_mask is not None:
+                    masked_weights.masked_fill(padding_mask.unsqueeze(1).unsqueeze(2) == 0, float('-inf'))
 
                 norm_weights = F.softmax(masked_weights,dim=-1)
                 norm_weights = self.attn_dropout(norm_weights)
@@ -121,8 +121,8 @@ class SelfAttend(nn.Module):
 
             else:
                 
-                if padding_mask:
-                    attn_weight.masked_fill(padding_mask == 0, float('-inf'))
+                if padding_mask is not None:
+                    attn_weight.masked_fill(padding_mask.unsqueeze(1).unsqueeze(2) == 0, float('-inf'))
 
                 norm_weights = F.softmax(attn_weight,dim=-1)
 
@@ -202,7 +202,7 @@ class TransformerEncoder(nn.Module):
         if self.configs.use_flash_attn:
             logging.basicConfig(level=logging.INFO)  
             self.logger = logging.getLogger(__name__)
-            
+
             self.logger.info("This implementation of flash attention does not support src_key_padding_mask or tgt_key_padding_mask")
             self.give_info = True
 
@@ -240,3 +240,6 @@ class TransformerEncoder(nn.Module):
         return x
     
     
+class TransformerDecoder(nn.Module):
+    def __init__(self,configs):
+        pass
