@@ -60,8 +60,6 @@ class SelfAttend(nn.Module):
         super(SelfAttend,self).__init__()
 
         self.configs = configs
-        logging.basicConfig(level=logging.INFO)  
-        self.logger = logging.getLogger(__name__)  # Create a logger instance
 
         self.query = nn.Linear(self.configs.hidden_dim,self.configs.hidden_dim)
         self.key = nn.Linear(self.configs.hidden_dim,self.configs.hidden_dim)
@@ -73,6 +71,7 @@ class SelfAttend(nn.Module):
         
 
         self.use_flash_attn = configs.use_flash_attn
+        self.give_info = False
 
     def get_qkv(self,xq,xk,xv):
         assert xq.shape[-1] == xk.shape[-1] == xv.shape[-1], self.logger.info('shape of query, key and value embedding dimension must be thesame')
@@ -96,7 +95,6 @@ class SelfAttend(nn.Module):
             self.register_buffer('attn_mask',torch.tril(torch.ones(1, 1, self.configs.max_blocksize,self.configs.max_blocksize,dtype=bool)))
 
         if self.configs.use_flash_attn:
-            self.logger.info("This implementation of flash attention does not support src_key_padding_mask or tgt_key_padding_mask")
             
             if is_causal:
                 with torch.backends.cuda.sdp_kernel(enable_math=False): # use the most efficient implementation fused kernel
@@ -188,7 +186,10 @@ class TransformerEncoder(nn.Module):
     def __init__(self,configs):
         super(TransformerEncoder,self).__init__()
         self.configs = configs
+        logging.basicConfig(level=logging.INFO)  
+        self.logger = logging.getLogger(__name__)  # Create a logger instance
 
+        
         self.Encoder = nn.ModuleDict(dict(
             wte = nn.Embedding(configs.vocab_size,configs.embed_dim),
             wpe = nn.Embedding(configs.max_blocksize,configs.embed_dim) if not configs.sinusoid else PositionalEncoding(d_model = configs.embed_dim, max_len = configs.max_blocksize),
@@ -198,6 +199,10 @@ class TransformerEncoder(nn.Module):
             ),
             ln = LayerNorm(configs.embed_dim,configs.bias),
         ))
+        
+        if self.configs.use_flash_attn:
+            self.logger.info("This implementation of flash attention does not support src_key_padding_mask or tgt_key_padding_mask")
+            self.give_info = True
 
     def _init_weights_(self, module):
 
@@ -231,4 +236,5 @@ class TransformerEncoder(nn.Module):
         x = self.Encoder.ln(x)
 
         return x
+    
     
