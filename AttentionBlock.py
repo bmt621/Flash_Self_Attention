@@ -3,6 +3,7 @@ import torch.nn.functional as F
 import math
 import torch.nn as nn
 import logging
+from torch.autograd import Variable
 
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
@@ -33,7 +34,27 @@ class MLP(nn.Module):
         x = self.dropout(x)
         return x
     
+class PositionalEncoding(nn.Module):
+    "Implement the PE function."
+    def __init__(self, d_model, dropout, max_len=512):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
 
+        # Compute the positional encodings once in log space.
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) *
+                             -(math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + Variable(self.pe[:, :x.size(1)],
+                         requires_grad=False)
+        return self.dropout(x)
+    
 class SelfAttend(nn.Module):
     def __init__(self,configs):
         super(SelfAttend,self).__init__()
@@ -160,3 +181,54 @@ class DecoderBlock(nn.Module):
         x = x + self.mlp(self.ln_2(x))
 
         return x
+    
+
+class TransformerEncoder(nn.Module):
+
+    def __init__(self,configs):
+        super(TransformerEncoder,self).__init__()
+        self.configs = configs
+
+        self.Encoder = nn.ModuleDict(dict(
+            wte = nn.Embedding(configs.vocab_size,configs.embed_dim),
+            wpe = nn.Embedding(configs.max_blocksize,configs.embed_dim) if not configs.sinusoid else PositionalEncoding(d_model = configs.embed_dim, max_len = configs.max_blocksize),
+            dropout = nn.Dropout(configs.dropout),
+            h_layer = nn.ModuleList(
+            [EncoderBlock(configs) for _ in range(configs.n_encoder_layer)]
+            ),
+            ln = LayerNorm(configs.embed_dim,configs.bias),
+        ))
+
+    def _init_weights_(self, module):
+
+        if isinstance(module, nn.Linear):
+            torch.nn.init.xavier_normal_(module.weight)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.xavier_normal_(module.weight)
+    
+    def forward(self,idx,src_padding_mask=None):
+
+        device = idx.device
+        b, t = idx.shape
+
+        assert t<self.configs.max_blocksize, 'length on input token {} should not exceed the max_token_length {}'.format(t,self.configs.block_size)
+        
+        pos = torch.arange(0, t, dtype=torch.long,device=device)
+        tok_emb = self.Encoder.wte(idx)
+        
+        if not self.configs.sinusoid:
+            pos_emb = self.Encoder.wpe(pos)
+            x = self.Encoder.dropout(tok_emb + pos_emb)
+        else:
+            x = self.Encoder.wpe(tok_emb)
+        
+        for block in self.Encoder.h_layer:
+            x = block(x, src_padding_mask)
+        
+        x = self.Encoder.ln(x)
+
+        return x
+    
