@@ -186,8 +186,7 @@ class TransformerEncoder(nn.Module):
     def __init__(self,configs):
         super(TransformerEncoder,self).__init__()
         self.configs = configs
-        logging.basicConfig(level=logging.INFO)  
-        self.logger = logging.getLogger(__name__)  # Create a logger instance
+        
 
         
         self.Encoder = nn.ModuleDict(dict(
@@ -201,6 +200,9 @@ class TransformerEncoder(nn.Module):
         ))
         
         if self.configs.use_flash_attn:
+            logging.basicConfig(level=logging.INFO)  
+            self.logger = logging.getLogger(__name__)
+            
             self.logger.info("This implementation of flash attention does not support src_key_padding_mask or tgt_key_padding_mask")
             self.give_info = True
 
