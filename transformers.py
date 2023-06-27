@@ -1,13 +1,19 @@
 from AttentionBlock import *
 
 
-class TransformerEncoder(nn.Module):
-    def __init__(self,configs):
-        super(TransformerEncoder, self)
+class EncoderModel(nn.Module):
+    def __init__(self):
+        super(EncoderModel,self).__init__()
         pass
 
-class TransformerDecoder(nn.Module):
-    def __init__(self) -> None:
-        super(TransformerDecoder, self).__init__()
+class DecoderModel(nn.Module):
+    def __init__(self):
+        super(DecoderModel, self).__init__()
         pass
+
+class EncoderDecoder(nn.Module):
+    def __init__(self):
+        super(EncoderDecoder, self).__init__()
+        pass
+    
 
