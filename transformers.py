@@ -15,5 +15,3 @@ class EncoderDecoder(nn.Module):
     def __init__(self):
         super(EncoderDecoder, self).__init__()
         pass
-    
-
