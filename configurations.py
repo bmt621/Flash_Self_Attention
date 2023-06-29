@@ -12,15 +12,21 @@ class TransformerEncoderConfigs(self_attend_configs):
     vocab_size: int = None
     embed_dim: int = 768
     sinusoid: bool = False
+    norm_first: bool = True
+    d_ff: int = 2048
 
 class TransformerDecoderConfigs(self_attend_configs):
     n_decoder_layer: int = 5
     vocab_size: int = None
     embed_dim: int = 768
-    sinusoid: bool = False
+    sinusoid: bool  = False
+    norm_first: bool = True
+
 
 class EncoderDecoderConfigs(self_attend_configs):
     n_encoder_layer: int = 5
     n_decoder_layer: int = 5
     embed_dim: int = 768
     vocab_size: int =  None
+    sinusoid: bool = False
+    norm_first: bool = True

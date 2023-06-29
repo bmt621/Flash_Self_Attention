@@ -138,20 +138,26 @@ class EncoderBlock(nn.Module):
 
     def __init__(self, config):
         super(EncoderBlock, self).__init__()
-
-        self.ln_1 = LayerNorm(config.hidden_dim, bias=config.bias)
+        self.config = config
+        self.ln_1 = nn.LayerNorm(config.hidden_dim, eps=1e-5)
         self.attn = SelfAttend(config)
 
-        self.ln_2 = LayerNorm(config.hidden_dim, bias=config.bias)
+        self.ln_2 = nn.LayerNorm(config.hidden_dim, eps=1e-5)
         self.mlp = MLP(config)
 
     def forward(self, x,src_padding_mask = None):
 
-        x = self.ln_1(x)
-        q, k, v = self.attn.get_qkv(x,x,x)
+        if self.config.norm_first:
 
-        x = x + self.attn(q, k, v, src_padding_mask)
-        x = x + self.mlp(self.ln_2(x))
+            x = self.ln_1(x)
+            q, k, v = self.attn.get_qkv(x,x,x)
+
+            x = x + self.attn(q, k, v, src_padding_mask)
+            x = x + self.mlp(self.ln_2(x))
+        else:
+            q, k, v = self.attn.get_qkv(x,x,x)
+            x = self.ln_1(x + self.attn(q, k, v, src_padding_mask))
+            x = self.ln_2(x + self.mlp(x))
 
         return x
     
@@ -205,16 +211,7 @@ class TransformerEncoder(nn.Module):
 
             self.logger.info("This implementation of flash attention does not support src_key_padding_mask or tgt_key_padding_mask")
             self.give_info = True
-
-    def _init_weights_(self, module):
-
-        if isinstance(module, nn.Linear):
-            torch.nn.init.xavier_normal_(module.weight)
-            if module.bias is not None:
-                torch.nn.init.zeros_(module.bias)
-
-        elif isinstance(module, nn.Embedding):
-            torch.nn.init.xavier_normal_(module.weight)
+            
     
     def forward(self,idx,src_padding_mask=None):
 
