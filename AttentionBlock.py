@@ -148,13 +148,20 @@ class EncoderBlock(nn.Module):
     def forward(self, x,src_padding_mask = None):
 
         if self.config.norm_first:
+            """
+            Encoder Self Attention with Norm and Add
 
+            """
             x = self.ln_1(x)
             q, k, v = self.attn.get_qkv(x,x,x)
 
             x = x + self.attn(q, k, v, src_padding_mask)
             x = x + self.mlp(self.ln_2(x))
         else:
+            """
+            Encoder Self Attention with Add and Norm
+            
+            """
             q, k, v = self.attn.get_qkv(x,x,x)
             x = self.ln_1(x + self.attn(q, k, v, src_padding_mask))
             x = self.ln_2(x + self.mlp(x))
@@ -175,14 +182,23 @@ class DecoderBlock(nn.Module):
         
 
     def forward(self, x, mem, tgt_padding_mask = None):
-        x = self.ln_1(x)
-        q, k, v = self.attn.get_qkv(x, x, x)
+        if self.config.norm_first:
 
-        new_state_of_x = self.attn(q,k,v, is_causal=True)
-        q, k, v = self.attn.get_qkv(new_state_of_x, mem, mem)
+            x = self.ln_1(x)
+            q, k, v = self.attn.get_qkv(x, x, x)
 
-        x = x + self.attn(q,k,v,is_causal=False, padding_mask = tgt_padding_mask)
-        x = x + self.mlp(self.ln_2(x))
+            x = x + self.attn(q,k,v, is_causal=True)  # Masked Self-Attention
+            q, k, v = self.attn.get_qkv(x, mem, mem)
+
+            x = x + self.attn(q,k,v,is_causal=False, padding_mask = tgt_padding_mask) # Encoder-Decoder Attention
+            x = x + self.mlp(self.ln_2(x))
+        else:
+            q, k, v = self.attn.get_qkv(x,x,x)
+            x = x + self.attn(q,k,v, is_causal=True) # Masked Self-Attention
+
+            q, k, v = self.attn.get_qkv(x, mem, mem) 
+            x = x + self.attn(q, k, v, is_causal=False, padding_mask = tgt_padding_mask) # Encoder-Decoder Attention
+            x = self.ln_2(x + self.mlp(x))
 
         return x
     
@@ -211,7 +227,7 @@ class TransformerEncoder(nn.Module):
 
             self.logger.info("This implementation of flash attention does not support src_key_padding_mask or tgt_key_padding_mask")
             self.give_info = True
-            
+
     
     def forward(self,idx,src_padding_mask=None):
 
