@@ -1,8 +1,9 @@
 from torch.utils.data import DataLoader
-import torch
 from transformers import get_scheduler
-
-from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
+from timeit import default_timer as timer
+import numpy as np
+import torch
 
 class Trainer:
     def __init__(self,model: torch.nn.Module,
@@ -44,14 +45,21 @@ class Trainer:
         return loss.item()
 
     def _run_epoch(self,epoch):
+        losses = []
         for batch in self.train_data:
             loss = self._run_batch(batch)
-        print("Epoch: {}, Loss: {}".format(epoch, loss))
+            losses.append(loss)
+        
+        return np.mean(losses)
+        
 
     def train(self, max_epochs: int):
         for epoch in range(max_epochs):
-            self._run_epoch(epoch)
-
+            start_time=timer()
+            train_loss = self._run_epoch(epoch)
+            end_time = timer()
+            print((f"Epoch: {epoch}, Train loss: {train_loss:.3f}, "f"Epoch time = {(end_time - start_time):.3f}s"))
+            
             if epoch % self.save_every == 0:
                 self._save_checkpoint(epoch)
 
@@ -59,3 +67,7 @@ class Trainer:
     def _save_checkpoint(self,epoch):
         torch.save(self.checkpoint,self.checkpoint_dir)
         print("Saved checkpoint {} at Epoch {}".format(self.checkpoint_dir,epoch))
+
+
+    
+    
